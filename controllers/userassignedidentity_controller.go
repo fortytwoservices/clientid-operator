@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,32 +38,41 @@ func (r *UserAssignedIdentityReconciler) Reconcile(ctx context.Context, req ctrl
 		log.Info("Extracted application name", "appName", appName)
 
 		if appName == "" {
-			log.Info("Application name could not be extracted; invalid format")
-			return ctrl.Result{}, nil // Consider whether to return an error instead
-		}
-
-		saName := fmt.Sprintf("workload-identity-%s", appName)
-		log.Info("Looking for ServiceAccount in Namespace", "Namespace", req.Namespace)
-		log.Info("Constructed ServiceAccount name", "ServiceAccount", saName)
-
-		saKey := client.ObjectKey{Name: saName, Namespace: req.Namespace}
-		var sa corev1.ServiceAccount
-		if err := r.Get(ctx, saKey, &sa); err != nil {
-			log.Error(err, "Unable to fetch ServiceAccount", "ServiceAccount", saName)
+			err := fmt.Errorf("invalid format for UserAssignedIdentity name, cannot extract appName: %s", *identity.Spec.ForProvider.Name)
+			log.Error(err, "Application name could not be extracted")
 			return ctrl.Result{}, err
 		}
 
-		if sa.Annotations == nil {
-			sa.Annotations = map[string]string{}
+		var namespaces corev1.NamespaceList
+		if err := r.List(ctx, &namespaces); err != nil {
+			log.Error(err, "Unable to list namespaces")
+			return ctrl.Result{}, err
 		}
 
-		log.Info("Ready to update ServiceAccount with clientId", "ServiceAccount", saName, "clientId", clientID)
-		// Uncomment the following line to enable actual patching once verification is complete
-		// sa.Annotations["azure.workload.identity/client-id"] = clientID
-		// if err := r.Update(ctx, &sa); err != nil {
-		//     log.Error(err, "Failed to update ServiceAccount", "ServiceAccount", saName)
-		//     return ctrl.Result{}, err
-		// }
+		for _, ns := range namespaces.Items {
+			saName := fmt.Sprintf("workload-identity-%s", appName)
+			saKey := client.ObjectKey{Name: saName, Namespace: ns.Name}
+			var sa corev1.ServiceAccount
+			if err := r.Get(ctx, saKey, &sa); err == nil {
+				// Found the service account, update it
+				if sa.Annotations == nil {
+					sa.Annotations = make(map[string]string)
+				}
+
+				// Log current annotations for debugging
+				log.Info("Current ServiceAccount Annotations", "Annotations", sa.Annotations)
+
+				sa.Annotations["azure.workload.identity/client-id"] = *clientID
+				if err := r.Update(ctx, &sa); err != nil {
+					log.Error(err, "Failed to update ServiceAccount annotations", "ServiceAccount", saName)
+					continue // Optionally, you could decide to requeue here
+				}
+				log.Info("Successfully updated ServiceAccount with clientId", "ServiceAccount", saName, "clientId", *clientID)
+			} else if !errors.IsNotFound(err) {
+				log.Error(err, "Failed to get ServiceAccount", "ServiceAccount", saName)
+				return ctrl.Result{}, err
+			}
+		}
 	}
 
 	return ctrl.Result{}, nil

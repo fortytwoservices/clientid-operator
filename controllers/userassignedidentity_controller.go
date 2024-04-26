@@ -59,13 +59,12 @@ func (r *UserAssignedIdentityReconciler) Reconcile(ctx context.Context, req ctrl
 					sa.Annotations = make(map[string]string)
 				}
 
-				// Log current annotations for debugging
 				log.Info("Current ServiceAccount Annotations", "Annotations", sa.Annotations)
 
 				sa.Annotations["azure.workload.identity/client-id"] = *clientID
 				if err := r.Update(ctx, &sa); err != nil {
 					log.Error(err, "Failed to update ServiceAccount annotations", "ServiceAccount", saName)
-					continue // Optionally, you could decide to requeue here
+					continue
 				}
 				log.Info("Successfully updated ServiceAccount with clientId", "ServiceAccount", saName, "clientId", *clientID)
 			} else if !errors.IsNotFound(err) {
@@ -83,7 +82,7 @@ func extractAppName(managedIdentityName string) string {
 	if len(parts) < 4 {
 		return ""
 	}
-	// Assuming the app name is always the third part in `id-ats-appname-dv-azunea-001`
+	// Assuming the app name is always the third part in e.g `id-ats-appname-dv-azunea-001`
 	return parts[2]
 }
 

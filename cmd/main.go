@@ -117,7 +117,7 @@ func main() {
 		// LeaderElectionReleaseOnCancel: true,
 	})
 	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+		setupLog.Error(err, "Unable to start the ClientID Operator")
 		os.Exit(1)
 	}
 
@@ -126,24 +126,24 @@ func main() {
 		Scheme: mgr.GetScheme(),
 		Log:    ctrl.Log.WithName("controllers").WithName("UserAssignedIdentity"),
 	}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "UserAssignedIdentity")
+		setupLog.Error(err, "Unable to create controller", "controller", "UserAssignedIdentity")
 		os.Exit(1)
 	}
 
 	//+kubebuilder:scaffold:builder
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
+		setupLog.Error(err, "Unable to set up health check")
 		os.Exit(1)
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
+		setupLog.Error(err, "Unable to set up ready check")
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLog.Info("Starting ClientID Operator by Fortytwo")
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
+		setupLog.Error(err, "Error running ClientID Operator")
 		os.Exit(1)
 	}
 }

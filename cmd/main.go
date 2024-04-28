@@ -26,6 +26,7 @@ import (
 	"github.com/deggja/clientid-operator/controllers"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	roleassignmentv1beta1 "github.com/upbound/provider-azure/apis/authorization/v1beta1"
 	managedidentityv1beta1 "github.com/upbound/provider-azure/apis/managedidentity/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -46,6 +47,7 @@ var (
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(managedidentityv1beta1.AddToScheme(scheme))
+	utilruntime.Must(roleassignmentv1beta1.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
 }

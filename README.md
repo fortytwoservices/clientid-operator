@@ -14,7 +14,7 @@ This operator works with specific kinds and versions of resources:
 ## Naming Syntax
 
 To ensure proper synchronization, resources must follow a strict naming syntax:
-- **Managed Identities** should be named with the prefix and the application name, e.g., `id-ats-{appName}-dv-azunea-001`.
+- **Managed Identities** should be named with the prefix and the application name, e.g. `workload-identity-{appName}`.
 - **Service Accounts** should follow a similar naming convention, e.g., `workload-identity-{appName}`.
 - **Role Assignments** should use a naming convention that includes the application name, e.g., `ra-ats-{appName}-dv-azunea-contributor`.
 

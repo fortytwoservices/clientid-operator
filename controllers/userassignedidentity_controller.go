@@ -121,7 +121,7 @@ func extractAppName(managedIdentityName string) string {
 	if len(parts) < 4 {
 		return ""
 	}
-	// Assuming the app name is always the third part in e.g `id-ats-appname-dv-azunea-001`
+	// Assuming the app name is always the third part in e.g `id-service-appname-dv-azunea-001`
 	return parts[2]
 }
 

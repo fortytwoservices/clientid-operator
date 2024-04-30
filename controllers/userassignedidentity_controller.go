@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -39,33 +40,42 @@ func (r *UserAssignedIdentityReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if clientID == nil || *clientID == "" || principalID == nil || *principalID == "" {
 		log.Info("Missing critical ID information, skipping update.")
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
 	}
 
 	if appName == "" {
 		log.Error(fmt.Errorf("invalid name format"), "Cannot extract appName", "name", *identity.Spec.ForProvider.Name)
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
 	}
 
-	if err := r.updateServiceAccounts(ctx, appName, *clientID, log); err != nil {
+	updateNeeded, err := r.updateServiceAccounts(ctx, appName, *clientID, log)
+	if err != nil {
 		log.Error(err, "Failed to update ServiceAccounts")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
 	}
 
-	if err := r.updateRoleAssignments(ctx, appName, *principalID, log); err != nil {
+	roleUpdateNeeded, err := r.updateRoleAssignments(ctx, appName, *principalID, log)
+	if err != nil {
 		log.Error(err, "Failed to update RoleAssignments")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
 	}
 
-	return ctrl.Result{}, nil
+	// Requeue periodically to check for changes or necessary updates
+	if updateNeeded || roleUpdateNeeded {
+		log.Info("Updates applied, rechecking in 2 minutes to ensure state.")
+		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+	}
+
+	// If no updates are needed, check less frequently
+	return ctrl.Result{RequeueAfter: 10 * time.Hour}, nil
 }
 
-func (r *UserAssignedIdentityReconciler) updateServiceAccounts(ctx context.Context, appName, clientID string, log logr.Logger) error {
+func (r *UserAssignedIdentityReconciler) updateServiceAccounts(ctx context.Context, appName, clientID string, log logr.Logger) (bool, error) {
 	var namespaces corev1.NamespaceList
 	if err := r.List(ctx, &namespaces); err != nil {
-		return err
+		return false, err
 	}
-
+	updateNeeded := false
 	for _, ns := range namespaces.Items {
 		saName := fmt.Sprintf("workload-identity-%s", appName)
 		var sa corev1.ServiceAccount
@@ -73,31 +83,31 @@ func (r *UserAssignedIdentityReconciler) updateServiceAccounts(ctx context.Conte
 			if errors.IsNotFound(err) {
 				continue
 			}
-			return err
+			return false, err
 		}
 
-		if sa.Annotations == nil {
-			sa.Annotations = make(map[string]string)
+		if sa.Annotations == nil || sa.Annotations["azure.workload.identity/client-id"] != clientID {
+			if sa.Annotations == nil {
+				sa.Annotations = make(map[string]string)
+			}
+			sa.Annotations["azure.workload.identity/client-id"] = clientID
+			if err := r.Update(ctx, &sa); err != nil {
+				return false, err
+			}
+			updateNeeded = true
 		}
-		sa.Annotations["azure.workload.identity/client-id"] = clientID
-		if err := r.Update(ctx, &sa); err != nil {
-			return err
-		}
-		log.Info("Successfully updated ServiceAccount with ClientID", "ServiceAccount", saName, "ClientID", clientID)
 	}
-	return nil
+	return updateNeeded, nil
 }
 
-func (r *UserAssignedIdentityReconciler) updateRoleAssignments(ctx context.Context, appName, principalID string, log logr.Logger) error {
+func (r *UserAssignedIdentityReconciler) updateRoleAssignments(ctx context.Context, appName, principalID string, log logr.Logger) (bool, error) {
 	var roleAssignments ra.RoleAssignmentList
 	selector := client.MatchingLabels{"application": appName, "type": "roleassignment"}
 	if err := r.Client.List(ctx, &roleAssignments, selector); err != nil {
-		log.Error(err, "Unable to list RoleAssignments")
-		return err
+		return false, err
 	}
 
-	log.Info("Number of RoleAssignments fetched", "count", len(roleAssignments.Items))
-
+	roleUpdateNeeded := false
 	for _, roleAssignment := range roleAssignments.Items {
 		if roleAssignment.Spec.ForProvider.PrincipalID == nil || *roleAssignment.Spec.ForProvider.PrincipalID != principalID {
 			if roleAssignment.Spec.ForProvider.PrincipalID == nil {
@@ -105,15 +115,12 @@ func (r *UserAssignedIdentityReconciler) updateRoleAssignments(ctx context.Conte
 			}
 			*roleAssignment.Spec.ForProvider.PrincipalID = principalID
 			if err := r.Client.Update(ctx, &roleAssignment); err != nil {
-				log.Error(err, "Failed to update RoleAssignment with new principalId", "RoleAssignment", roleAssignment.Name, "NewPrincipalID", principalID)
-				continue // proceed with next RoleAssignment if the current update fails
+				continue // Log error but proceed with the next RoleAssignment
 			}
-			log.Info("Successfully updated RoleAssignment with new PrincipalID", "RoleAssignment", roleAssignment.Name, "PrincipalID", principalID)
-		} else {
-			log.Info("No update required for RoleAssignment", "RoleAssignment", roleAssignment.Name)
+			roleUpdateNeeded = true
 		}
 	}
-	return nil
+	return roleUpdateNeeded, nil
 }
 
 func extractAppName(managedIdentityName string) string {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -39,22 +40,22 @@ func (r *UserAssignedIdentityReconciler) Reconcile(ctx context.Context, req ctrl
 
 	if clientID == nil || *clientID == "" || principalID == nil || *principalID == "" {
 		log.Info("Missing critical ID information, skipping update.")
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
 	}
 
 	if appName == "" {
 		log.Error(fmt.Errorf("invalid name format"), "Cannot extract appName", "name", *identity.Spec.ForProvider.Name)
-		return ctrl.Result{}, nil
+		return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
 	}
 
 	if err := r.updateServiceAccounts(ctx, appName, *clientID, log); err != nil {
 		log.Error(err, "Failed to update ServiceAccounts")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
 	}
 
 	if err := r.updateRoleAssignments(ctx, appName, *principalID, log); err != nil {
 		log.Error(err, "Failed to update RoleAssignments")
-		return ctrl.Result{}, err
+		return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
 	}
 
 	return ctrl.Result{}, nil

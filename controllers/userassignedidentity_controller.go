@@ -62,12 +62,12 @@ func (r *UserAssignedIdentityReconciler) Reconcile(ctx context.Context, req ctrl
 
 	// Requeue periodically to check for changes or necessary updates
 	if updateNeeded || roleUpdateNeeded {
-		log.Info("Updates applied, rechecking in 30 minutes to ensure state.")
-		return ctrl.Result{RequeueAfter: 30 * time.Minute}, nil
+		log.Info("Updates applied, rechecking in 2 minutes to ensure state.")
+		return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
 	}
 
 	// If no updates are needed, check less frequently
-	return ctrl.Result{RequeueAfter: 2 * time.Hour}, nil
+	return ctrl.Result{RequeueAfter: 10 * time.Hour}, nil
 }
 
 func (r *UserAssignedIdentityReconciler) updateServiceAccounts(ctx context.Context, appName, clientID string, log logr.Logger) (bool, error) {

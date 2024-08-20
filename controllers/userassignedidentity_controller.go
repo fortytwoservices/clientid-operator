@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -51,7 +52,7 @@ func (r *UserAssignedIdentityReconciler) Reconcile(ctx context.Context, req ctrl
 	updateNeeded, err := r.updateServiceAccounts(ctx, appName, *clientID, log)
 	if err != nil {
 		log.Error(err, "Failed to update ServiceAccounts")
-		return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
 	}
 
 	roleUpdateNeeded, err := r.updateRoleAssignments(ctx, appName, *principalID, log)
@@ -94,11 +95,48 @@ func (r *UserAssignedIdentityReconciler) updateServiceAccounts(ctx context.Conte
 			}
 			updateNeeded = true
 		}
+		// trigger a restart of the deployment that is using the service account to ensure correct client ID is usee
+		if updateNeeded {
+			if err := r.restartDeployment(ctx, saName, ns.Name, log); err != nil {
+				log.Error(err, "Failed to restart deployment after updating service account annotation", "ServiceAccount", saName)
+				continue
+			}
+		}
 	}
 	return updateNeeded, nil
 }
 
+func (r *UserAssignedIdentityReconciler) restartDeployment(ctx context.Context, saName, namespace string, log logr.Logger) error {
+	var deployments appsv1.DeploymentList
+	// check what deployments are using the service account
+	if err := r.List(ctx, &deployments, client.InNamespace(namespace), client.MatchingFields(map[string]string{
+		"spec.template.spec.serviceAccountName": saName,
+	})); err != nil {
+		return err
+	}
+
+	for _, deployment := range deployments.Items {
+		// patch deploy with annotation to trigger restart
+		patch := client.MergeFrom(deployment.DeepCopy())
+		if deployment.Spec.Template.Annotations == nil {
+			deployment.Spec.Template.Annotations = map[string]string{}
+		}
+		deployment.Spec.Template.Annotations["azure.workload.identity/restart"] = time.Now().Format(time.RFC3339)
+		if err := r.Patch(ctx, &deployment, patch); err != nil {
+			log.Error(err, "Failed to add annotation to deployment", "Deployment", deployment.Name)
+			continue
+		}
+		log.Info("Successfully restarted deployment after updating service account annotation", "Deployment", deployment.Name)
+	}
+	return nil
+}
+
 func (r *UserAssignedIdentityReconciler) updateRoleAssignments(ctx context.Context, appName, principalID string, log logr.Logger) (bool, error) {
+	if principalID == "" {
+		log.Error(fmt.Errorf("principalID is empty"), "Invalid principalID provided")
+		return false, fmt.Errorf("principalID is emtpy")
+	}
+	
 	var roleAssignments ra.RoleAssignmentList
 	selector := client.MatchingLabels{"application": appName, "type": "roleassignment"}
 	if err := r.Client.List(ctx, &roleAssignments, selector); err != nil {
@@ -131,6 +169,13 @@ func extractAppName(managedIdentityName string) string {
 }
 
 func (r *UserAssignedIdentityReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &appsv1.Deployment{}, "spec.template.spec.serviceAccountName", func(rawObj client.Object) []string {
+        deployment := rawObj.(*appsv1.Deployment)
+        return []string{deployment.Spec.Template.Spec.ServiceAccountName}
+    }); err != nil {
+        return err
+    }
+	
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mi.UserAssignedIdentity{}).
 		Owns(&corev1.ServiceAccount{}).

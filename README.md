@@ -7,9 +7,9 @@ The ClientID Operator synchronizes Azure managed identities, service accounts, a
 ## Prerequisites
 
 This operator works with specific kinds and versions of resources:
-- **Managed Identities**: `apiVersion: managedidentity.azure.upbound.io/v1beta1, Kind: UserAssignedIdentity`
+- **Managed Identities**: `apiVersion: managedidentity.azure.upbound.io/v1beta1 and managedidentity.azure.m.upbound.io/v1beta1, Kind: UserAssignedIdentity`
 - **Service Accounts**: `apiVersion: v1, Kind: ServiceAccount`
-- **Role Assignments**: `apiVersion: authorization.azure.upbound.io/v1beta1, Kind: RoleAssignment`
+- **Role Assignments**: `apiVersion: authorization.azure.upbound.io/v1beta1 and roleassignments.authorization.azure.m.upbound.io/v1beta1, Kind: RoleAssignment`
 
 ## Naming Syntax
 

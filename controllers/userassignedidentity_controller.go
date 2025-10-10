@@ -14,8 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
-	ra "github.com/upbound/provider-azure/apis/authorization/v1beta1"
-	mi "github.com/upbound/provider-azure/apis/managedidentity/v1beta1"
+	ra "github.com/crossplane-contrib/provider-upjet-azure/tree/main/apis/cluster/authorization/v1beta1"
+	ra2 "github.com/crossplane-contrib/provider-upjet-azure/tree/main/apis/namespaced/authorization/v1beta1"
+	mi "github.com/crossplane-contrib/provider-upjet-azure/tree/main/apis/cluster/managedidentity/v1beta1"
+	mi2 "github.com/crossplane-contrib/provider-upjet-azure/tree/main/apis/namespaced/managedidentity/v1beta1"
 )
 
 type UserAssignedIdentityReconciler struct {
@@ -28,6 +30,12 @@ func (r *UserAssignedIdentityReconciler) Reconcile(ctx context.Context, req ctrl
 	log := r.Log.WithValues("userassignedidentity", req.NamespacedName)
 
 	var identity mi.UserAssignedIdentity
+	if err := r.Get(ctx, req.NamespacedName, &identity); err != nil {
+		log.Error(err, "Unable to fetch UserAssignedIdentity")
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	var identity mi2.UserAssignedIdentity
 	if err := r.Get(ctx, req.NamespacedName, &identity); err != nil {
 		log.Error(err, "Unable to fetch UserAssignedIdentity")
 		return ctrl.Result{}, client.IgnoreNotFound(err)

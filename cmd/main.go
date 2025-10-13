@@ -26,10 +26,6 @@ import (
 	"github.com/deggja/clientid-operator/controllers"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	roleassignmentv1beta1 "github.com/crossplane-contrib/provider-upjet-azure/tree/main/apis/cluster/authorization/v1beta1"
-	roleassignmentv1beta1v2 "github.com/crossplane-contrib/provider-upjet-azure/tree/main/apis/namespaced/authorization/v1beta1"
-	managedidentityv1beta1 "github.com/crossplane-contrib/provider-upjet-azure/tree/main/apis/cluster/managedidentity/v1beta1"
-	managedidentityv1beta1v2 "github.com/crossplane-contrib/provider-upjet-azure/tree/main/apis/namespaced/managedidentity/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -48,10 +44,8 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(managedidentityv1beta1.AddToScheme(scheme))
-	utilruntime.Must(roleassignmentv1beta1.AddToScheme(scheme))
-	utilruntime.Must(roleassignmentv1beta1v2.AddToScheme(scheme))
-	utilruntime.Must(managedidentityv1beta1v2.AddToScheme(scheme))
+	// Note: We don't need to register Azure provider types anymore
+	// The controller uses unstructured client and dynamic watches
 
 	//+kubebuilder:scaffold:scheme
 }

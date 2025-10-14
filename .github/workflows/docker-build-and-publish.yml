@@ -2,6 +2,9 @@ name: Build and Push to GHCR
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - feat/add-support-for-new-apiversions
 
 jobs:
   build-and-push:

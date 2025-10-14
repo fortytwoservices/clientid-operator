@@ -14,8 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
-	ra "github.com/upbound/provider-azure/apis/authorization/v1beta1"
-	mi "github.com/upbound/provider-azure/apis/managedidentity/v1beta1"
+	ra "github.com/upbound/provider-azure/apis/namespaced/authorization/v1beta1"
+	mi "github.com/upbound/provider-azure/apis/namespaced/managedidentity/v1beta1"
+	ra2 "github.com/upbound/provider-azure/apis/cluster/authorization/v1beta1"
+	mi2 "github.com/upbound/provider-azure/apis/cluster/managedidentity/v1beta1"
 )
 
 type UserAssignedIdentityReconciler struct {
@@ -27,17 +29,71 @@ type UserAssignedIdentityReconciler struct {
 func (r *UserAssignedIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := r.Log.WithValues("userassignedidentity", req.NamespacedName)
 
+	// Try namespaced UserAssignedIdentity first
 	var identity mi.UserAssignedIdentity
-	if err := r.Get(ctx, req.NamespacedName, &identity); err != nil {
-		log.Error(err, "Unable to fetch UserAssignedIdentity")
-		return ctrl.Result{}, client.IgnoreNotFound(err)
+	err := r.Get(ctx, req.NamespacedName, &identity)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Try cluster-scoped UserAssignedIdentity
+			var clusterIdentity mi2.UserAssignedIdentity
+			if err2 := r.Get(ctx, req.NamespacedName, &clusterIdentity); err2 != nil {
+				log.Error(err2, "Unable to fetch UserAssignedIdentity from either namespaced or cluster scope")
+				return ctrl.Result{}, client.IgnoreNotFound(err2)
+			}
+			// Use cluster-scoped identity
+			return r.reconcileClusterIdentity(ctx, &clusterIdentity, log)
+		}
+		log.Error(err, "Error fetching namespaced UserAssignedIdentity")
+		return ctrl.Result{}, err
 	}
 
+	// Use namespaced identity
+	return r.reconcileNamespacedIdentity(ctx, &identity, log)
+}
+
+func (r *UserAssignedIdentityReconciler) reconcileNamespacedIdentity(ctx context.Context, identity *mi.UserAssignedIdentity, log logr.Logger) (ctrl.Result, error) {
 	clientID := identity.Status.AtProvider.ClientID
 	principalID := identity.Status.AtProvider.PrincipalID
 	appName := extractAppName(*identity.Spec.ForProvider.Name)
 
-	log.Info("Fetched UserAssignedIdentity", "clientID", clientID, "principalID", principalID, "appName", appName)
+	log.Info("Fetched namespaced UserAssignedIdentity", "clientID", clientID, "principalID", principalID, "appName", appName)
+
+	if clientID == nil || *clientID == "" || principalID == nil || *principalID == "" {
+		log.Info("Missing critical ID information, skipping update.")
+		return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
+	}
+
+	if appName == "" {
+		log.Error(fmt.Errorf("invalid name format"), "Cannot extract appName", "name", *identity.Spec.ForProvider.Name)
+		return ctrl.Result{RequeueAfter: time.Minute * 5}, nil
+	}
+
+	updateNeeded, err := r.updateServiceAccounts(ctx, appName, *clientID, log)
+	if err != nil {
+		log.Error(err, "Failed to update ServiceAccounts")
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, err
+	}
+
+	roleUpdateNeeded, err := r.updateRoleAssignments(ctx, appName, *principalID, log)
+	if err != nil {
+		log.Error(err, "Failed to update RoleAssignments")
+		return ctrl.Result{RequeueAfter: 5 * time.Minute}, err
+	}
+
+	if updateNeeded || roleUpdateNeeded {
+		log.Info("Updates applied, rechecking in 60 seconds to ensure state.")
+		return ctrl.Result{RequeueAfter: 1 * time.Minute}, nil
+	}
+
+	return ctrl.Result{RequeueAfter: 2 * time.Minute}, nil
+}
+
+func (r *UserAssignedIdentityReconciler) reconcileClusterIdentity(ctx context.Context, identity *mi2.UserAssignedIdentity, log logr.Logger) (ctrl.Result, error) {
+	clientID := identity.Status.AtProvider.ClientID
+	principalID := identity.Status.AtProvider.PrincipalID
+	appName := extractAppName(*identity.Spec.ForProvider.Name)
+
+	log.Info("Fetched cluster-scoped UserAssignedIdentity", "clientID", clientID, "principalID", principalID, "appName", appName)
 
 	if clientID == nil || *clientID == "" || principalID == nil || *principalID == "" {
 		log.Info("Missing critical ID information, skipping update.")
@@ -134,28 +190,54 @@ func (r *UserAssignedIdentityReconciler) restartDeployment(ctx context.Context, 
 func (r *UserAssignedIdentityReconciler) updateRoleAssignments(ctx context.Context, appName, principalID string, log logr.Logger) (bool, error) {
 	if principalID == "" {
 		log.Error(fmt.Errorf("principalID is empty"), "Invalid principalID provided")
-		return false, fmt.Errorf("principalID is emtpy")
-	}
-	
-	var roleAssignments ra.RoleAssignmentList
-	selector := client.MatchingLabels{"application": appName, "type": "roleassignment"}
-	if err := r.Client.List(ctx, &roleAssignments, selector); err != nil {
-		return false, err
+		return false, fmt.Errorf("principalID is empty")
 	}
 
 	roleUpdateNeeded := false
-	for _, roleAssignment := range roleAssignments.Items {
-		if roleAssignment.Spec.ForProvider.PrincipalID == nil || *roleAssignment.Spec.ForProvider.PrincipalID != principalID {
-			if roleAssignment.Spec.ForProvider.PrincipalID == nil {
-				roleAssignment.Spec.ForProvider.PrincipalID = new(string)
+	selector := client.MatchingLabels{"application": appName, "type": "roleassignment"}
+
+	// Try namespaced RoleAssignments first
+	var roleAssignments ra.RoleAssignmentList
+	if err := r.Client.List(ctx, &roleAssignments, selector); err != nil {
+		log.V(1).Info("Could not list namespaced RoleAssignments", "error", err)
+	} else {
+		for _, roleAssignment := range roleAssignments.Items {
+			if roleAssignment.Spec.ForProvider.PrincipalID == nil || *roleAssignment.Spec.ForProvider.PrincipalID != principalID {
+				if roleAssignment.Spec.ForProvider.PrincipalID == nil {
+					roleAssignment.Spec.ForProvider.PrincipalID = new(string)
+				}
+				*roleAssignment.Spec.ForProvider.PrincipalID = principalID
+				if err := r.Client.Update(ctx, &roleAssignment); err != nil {
+					log.Error(err, "Failed to update namespaced RoleAssignment", "name", roleAssignment.Name)
+					continue
+				}
+				log.Info("Updated namespaced RoleAssignment", "name", roleAssignment.Name)
+				roleUpdateNeeded = true
 			}
-			*roleAssignment.Spec.ForProvider.PrincipalID = principalID
-			if err := r.Client.Update(ctx, &roleAssignment); err != nil {
-				continue // Log error but proceed with the next RoleAssignment
-			}
-			roleUpdateNeeded = true
 		}
 	}
+
+	// Try cluster-scoped RoleAssignments
+	var clusterRoleAssignments ra2.RoleAssignmentList
+	if err := r.Client.List(ctx, &clusterRoleAssignments, selector); err != nil {
+		log.V(1).Info("Could not list cluster-scoped RoleAssignments", "error", err)
+	} else {
+		for _, roleAssignment := range clusterRoleAssignments.Items {
+			if roleAssignment.Spec.ForProvider.PrincipalID == nil || *roleAssignment.Spec.ForProvider.PrincipalID != principalID {
+				if roleAssignment.Spec.ForProvider.PrincipalID == nil {
+					roleAssignment.Spec.ForProvider.PrincipalID = new(string)
+				}
+				*roleAssignment.Spec.ForProvider.PrincipalID = principalID
+				if err := r.Client.Update(ctx, &roleAssignment); err != nil {
+					log.Error(err, "Failed to update cluster-scoped RoleAssignment", "name", roleAssignment.Name)
+					continue
+				}
+				log.Info("Updated cluster-scoped RoleAssignment", "name", roleAssignment.Name)
+				roleUpdateNeeded = true
+			}
+		}
+	}
+
 	return roleUpdateNeeded, nil
 }
 
@@ -170,15 +252,17 @@ func extractAppName(managedIdentityName string) string {
 
 func (r *UserAssignedIdentityReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(context.Background(), &appsv1.Deployment{}, "spec.template.spec.serviceAccountName", func(rawObj client.Object) []string {
-        deployment := rawObj.(*appsv1.Deployment)
-        return []string{deployment.Spec.Template.Spec.ServiceAccountName}
-    }); err != nil {
-        return err
-    }
-	
+		deployment := rawObj.(*appsv1.Deployment)
+		return []string{deployment.Spec.Template.Spec.ServiceAccountName}
+	}); err != nil {
+		return err
+	}
+
+	// Watch namespaced UserAssignedIdentity (primary)
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&mi.UserAssignedIdentity{}).
 		Owns(&corev1.ServiceAccount{}).
 		Owns(&ra.RoleAssignment{}).
+		Owns(&ra2.RoleAssignment{}).
 		Complete(r)
 }

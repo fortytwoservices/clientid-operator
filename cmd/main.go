@@ -26,8 +26,10 @@ import (
 	"github.com/deggja/clientid-operator/controllers"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	roleassignmentv1beta1 "github.com/upbound/provider-azure/apis/authorization/v1beta1"
-	managedidentityv1beta1 "github.com/upbound/provider-azure/apis/managedidentity/v1beta1"
+	namespacedauthorizationv1beta1 "github.com/upbound/provider-azure/apis/namespaced/authorization/v1beta1"
+	namespacedmanagedidentityv1beta1 "github.com/upbound/provider-azure/apis/namespaced/managedidentity/v1beta1"
+	clusterauthorizationv1beta1 "github.com/upbound/provider-azure/apis/cluster/authorization/v1beta1"
+	clustermanagedidentityv1beta1 "github.com/upbound/provider-azure/apis/cluster/managedidentity/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -46,8 +48,10 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-	utilruntime.Must(managedidentityv1beta1.AddToScheme(scheme))
-	utilruntime.Must(roleassignmentv1beta1.AddToScheme(scheme))
+	utilruntime.Must(namespacedmanagedidentityv1beta1.AddToScheme(scheme))
+	utilruntime.Must(namespacedauthorizationv1beta1.AddToScheme(scheme))
+	utilruntime.Must(clustermanagedidentityv1beta1.AddToScheme(scheme))
+	utilruntime.Must(clusterauthorizationv1beta1.AddToScheme(scheme))
 
 	//+kubebuilder:scaffold:scheme
 }

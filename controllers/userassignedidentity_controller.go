@@ -14,10 +14,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/go-logr/logr"
-	ra "github.com/upbound/provider-azure/apis/namespaced/authorization/v1beta1"
-	mi "github.com/upbound/provider-azure/apis/namespaced/managedidentity/v1beta1"
-	ra2 "github.com/upbound/provider-azure/apis/cluster/authorization/v1beta1"
-	mi2 "github.com/upbound/provider-azure/apis/cluster/managedidentity/v1beta1"
+	ra2 "github.com/upbound/provider-azure/v2/apis/cluster/authorization/v1beta1"
+	mi2 "github.com/upbound/provider-azure/v2/apis/cluster/managedidentity/v1beta1"
+	ra "github.com/upbound/provider-azure/v2/apis/namespaced/authorization/v1beta1"
+	mi "github.com/upbound/provider-azure/v2/apis/namespaced/managedidentity/v1beta1"
 )
 
 type UserAssignedIdentityReconciler struct {

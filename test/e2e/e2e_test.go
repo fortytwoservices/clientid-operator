@@ -24,7 +24,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/deggja/clientid-operator/test/utils"
+	"github.com/fortytwoservices/clientid-operator/test/utils"
 )
 
 const namespace = "clientid-operator-system"

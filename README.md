@@ -7,6 +7,7 @@ The ClientID Operator synchronizes Azure managed identities, service accounts, a
 ## Prerequisites
 
 This operator works with specific kinds and versions of resources:
+
 - **Managed Identities**: `apiVersion: managedidentity.azure.upbound.io/v1beta1 and managedidentity.azure.m.upbound.io/v1beta1, Kind: UserAssignedIdentity`
 - **Service Accounts**: `apiVersion: v1, Kind: ServiceAccount`
 - **Role Assignments**: `apiVersion: authorization.azure.upbound.io/v1beta1 and roleassignments.authorization.azure.m.upbound.io/v1beta1, Kind: RoleAssignment`
@@ -14,6 +15,7 @@ This operator works with specific kinds and versions of resources:
 ## Naming Syntax
 
 To ensure proper synchronization, resources must follow a strict naming syntax:
+
 - **Managed Identities** should be named with the prefix and the application name, e.g. `workload-identity-{appName}`.
 - **Service Accounts** should follow a similar naming convention, e.g., `workload-identity-{appName}`.
 - **Role Assignments** should use a naming convention that includes the application name, e.g., `ra-service-{appName}-dv-azunea-contributor`.
@@ -21,6 +23,7 @@ To ensure proper synchronization, resources must follow a strict naming syntax:
 ## Labels and Annotations
 
 Proper annotations and labels are crucial for the operator to function correctly:
+
 - **Service Accounts** must include the `azure.workload.identity/client-id` annotation.
 - **Role Assignments** must have the correct labels: 
   - `application: {appName}`

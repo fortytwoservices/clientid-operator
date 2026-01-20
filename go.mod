@@ -1,4 +1,4 @@
-module github.com/deggja/clientid-operator
+module github.com/fortytwoservices/clientid-operator
 
 go 1.25.0
 

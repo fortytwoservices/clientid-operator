@@ -9,5 +9,5 @@ plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
 projectName: clientid-operator
-repo: github.com/deggja/clientid-operator
+repo: github.com/fortytwoservices/clientid-operator
 version: "3"

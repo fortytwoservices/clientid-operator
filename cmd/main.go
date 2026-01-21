@@ -23,13 +23,13 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	"github.com/deggja/clientid-operator/controllers"
+	"github.com/fortytwoservices/clientid-operator/controllers"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
-	namespacedauthorizationv1beta1 "github.com/upbound/provider-azure/apis/namespaced/authorization/v1beta1"
-	namespacedmanagedidentityv1beta1 "github.com/upbound/provider-azure/apis/namespaced/managedidentity/v1beta1"
-	clusterauthorizationv1beta1 "github.com/upbound/provider-azure/apis/cluster/authorization/v1beta1"
-	clustermanagedidentityv1beta1 "github.com/upbound/provider-azure/apis/cluster/managedidentity/v1beta1"
+	clusterauthorizationv1beta1 "github.com/upbound/provider-azure/v2/apis/cluster/authorization/v1beta1"
+	clustermanagedidentityv1beta1 "github.com/upbound/provider-azure/v2/apis/cluster/managedidentity/v1beta1"
+	namespacedauthorizationv1beta1 "github.com/upbound/provider-azure/v2/apis/namespaced/authorization/v1beta1"
+	namespacedmanagedidentityv1beta1 "github.com/upbound/provider-azure/v2/apis/namespaced/managedidentity/v1beta1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"

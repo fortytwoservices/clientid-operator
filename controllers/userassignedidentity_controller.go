@@ -20,10 +20,16 @@ import (
 	mi "github.com/upbound/provider-azure/v2/apis/namespaced/managedidentity/v1beta1"
 )
 
+const ignoreAnnotation = "clientid-operator.fortytwo.io/ignore"
+
 type UserAssignedIdentityReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
 	Log    logr.Logger
+}
+
+func isIgnored(annotations map[string]string) bool {
+	return annotations[ignoreAnnotation] == "true"
 }
 
 func (r *UserAssignedIdentityReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -52,6 +58,11 @@ func (r *UserAssignedIdentityReconciler) Reconcile(ctx context.Context, req ctrl
 }
 
 func (r *UserAssignedIdentityReconciler) reconcileNamespacedIdentity(ctx context.Context, identity *mi.UserAssignedIdentity, log logr.Logger) (ctrl.Result, error) {
+	if isIgnored(identity.Annotations) {
+		log.Info("Skipping UserAssignedIdentity due to ignore annotation", "name", identity.Name)
+		return ctrl.Result{}, nil
+	}
+
 	clientID := identity.Status.AtProvider.ClientID
 	principalID := identity.Status.AtProvider.PrincipalID
 	appName := extractAppName(*identity.Spec.ForProvider.Name)
@@ -89,6 +100,11 @@ func (r *UserAssignedIdentityReconciler) reconcileNamespacedIdentity(ctx context
 }
 
 func (r *UserAssignedIdentityReconciler) reconcileClusterIdentity(ctx context.Context, identity *mi2.UserAssignedIdentity, log logr.Logger) (ctrl.Result, error) {
+	if isIgnored(identity.Annotations) {
+		log.Info("Skipping UserAssignedIdentity due to ignore annotation", "name", identity.Name)
+		return ctrl.Result{}, nil
+	}
+
 	clientID := identity.Status.AtProvider.ClientID
 	principalID := identity.Status.AtProvider.PrincipalID
 	appName := extractAppName(*identity.Spec.ForProvider.Name)
